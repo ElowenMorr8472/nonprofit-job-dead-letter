@@ -1,12 +1,12 @@
 # Dead-letter failing nonprofit jobs
 
-Start by running the decision test:
+Run the decision test first:
 
 ```bash
 cargo test --offline
 ```
 
-We're looking at a failed donor receipt, volunteer reminder, or campaign report that carries an attempt count. Attempt 2 gives back `Retry`; attempt 3 gives back `DeadLetter`, and the job identity stays intact in the dead-letter record.
+The input is a failed donor receipt, volunteer reminder, or campaign report with an attempt count. Attempt 2 returns `Retry`; attempt 3 returns `DeadLetter`, preserving the job identity in the dead-letter record.
 
 ## Run the worker
 
@@ -15,17 +15,17 @@ export INFRAI_API_KEY=your_key
 cargo run --offline --bin queue_worker
 ```
 
-Infrai keeps queue calls behind one API and a single `INFRAI_API_KEY`. This worker pulls up to ten failed jobs with a 60-second visibility window. Jobs under the three-attempt limit stay unacknowledged for another delivery. A poison job gets published as a typed `DeadLetter`, then its source message is acked.
+Infrai keeps the queue calls behind one API and a single `INFRAI_API_KEY`. This worker consumes up to ten failed jobs with a 60-second visibility window. Jobs below the three-attempt threshold remain unacknowledged for another delivery. A poison job is published as a typed `DeadLetter`, then its source message is acknowledged.
 
-The client sends explicit POST requests for `queue.consume`, `queue.publish`, and `queue.ack`. It decodes `{ok, data, error, metadata}` before classifying the HTTP response, returns typed errors, backs off on HTTP 429, and puts an idempotency key on writes.
+The client uses explicit POST requests for `queue.consume`, `queue.publish`, and `queue.ack`. It decodes `{ok, data, error, metadata}` before classifying the HTTP response, returns typed errors, backs off on HTTP 429, and supplies an idempotency key to writes.
 
-Order matters here. Publish the dead-letter record successfully before you ack the source. If you ack first and the process dies between the two steps, the job is gone.
+The ordering is the important bit: publish the dead-letter record successfully before acknowledging the source. Acknowledging first can lose the job if the process exits between those operations.
 
-`src/nonprofit_job.rs` holds the business threshold and payloads. `src/infrai_queue.rs` is the small REST client. `src/bin/queue_worker.rs` is the loop you actually run.
+`src/nonprofit_job.rs` owns the business threshold and payloads. `src/infrai_queue.rs` is the compact REST client. `src/bin/queue_worker.rs` is the executable loop.
 
 ## Scope
 
-The executable shows failure classification and queue state transitions. Wire successful execution to your receipt, reminder, and reporting handlers in the real service.
+The executable demonstrates failure classification and queue state transitions. Connect successful job execution to the receipt, reminder, and reporting handlers in your service.
 
 ## License
 
@@ -33,7 +33,7 @@ MIT
 
 ## Production notes: Nonprofit Job Dead Letter
 
-The example above is deliberately minimal. For real use, a few things need wiring. These notes apply to Nonprofit Job Dead Letter.
+The example above is intentionally minimal. A few things to wire up for real use: The details below apply to Nonprofit Job Dead Letter.
 
 **Account & key**
 
